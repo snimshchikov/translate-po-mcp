@@ -26,7 +26,7 @@ export class POFileService {
         msgstr: Array.isArray(item.msgstr) ? item.msgstr.join('') : item.msgstr,
         msgctxt: item.msgctxt ? item.msgctxt : undefined,
         comments: item.extractedComments || [],
-        flags: item.flags || [],
+        flags: this.normalizeFlags(item.flags),
         references: item.references || [],
         obsolete: item.obsolete || false
       }));
@@ -66,7 +66,22 @@ export class POFileService {
       po.headers = poFile.headers;
 
       poFile.entries.forEach(entry => {
-        const item = new (PO as any).PO.Item();
+        // Try multiple approaches to create PO item to handle different library versions
+        let item: any;
+        
+        try {
+          // Approach 1: Try PO.Item()
+          item = new (PO as any).Item();
+        } catch {
+          try {
+            // Approach 2: Try PO.PO.Item()
+            item = new (PO as any).PO.Item();
+          } catch {
+            // Approach 3: Create plain object (fallback)
+            item = {};
+          }
+        }
+
         item.msgid = entry.msgid;
         item.msgstr = entry.msgstr;
         if (entry.msgctxt) item.msgctxt = entry.msgctxt;
@@ -151,7 +166,7 @@ export class POFileService {
     entries.forEach(entry => {
       if (entry.obsolete) {
         stats.obsolete++;
-      } else if (entry.flags?.includes('fuzzy')) {
+      } else if (this.hasFlag(entry.flags, 'fuzzy')) {
         stats.fuzzy++;
       } else if (entry.msgstr && entry.msgstr.trim() !== '') {
         stats.translated++;
@@ -180,9 +195,7 @@ export class POFileService {
 
     poFile.entries[entryIndex]!.msgstr = request.msgstr;
     // Remove fuzzy flag when translation is updated
-    if (poFile.entries[entryIndex]!.flags) {
-      poFile.entries[entryIndex]!.flags = poFile.entries[entryIndex]!.flags!.filter(flag => flag !== 'fuzzy');
-    }
+    this.removeFlag(poFile.entries[entryIndex]!, 'fuzzy');
 
     return true;
   }
@@ -200,7 +213,7 @@ export class POFileService {
 
     if (entry.obsolete) return false;
 
-    const isFuzzy = entry.flags?.includes('fuzzy') || false;
+    const isFuzzy = this.hasFlag(entry.flags, 'fuzzy');
     const isTranslated = entry.msgstr && entry.msgstr.trim() !== '';
 
     if (isFuzzy && !includeFuzzy) return false;
@@ -208,5 +221,41 @@ export class POFileService {
     if (!isTranslated && !isFuzzy && !includeUntranslated) return false;
 
     return true;
+  }
+
+  private hasFlag(flags: string[] | Record<string, boolean> | undefined, flagName: string): boolean {
+    if (!flags) return false;
+    
+    if (Array.isArray(flags)) {
+      return flags.includes(flagName);
+    } else {
+      return Boolean(flags[flagName]);
+    }
+  }
+
+  private removeFlag(entry: TranslationEntry, flagName: string): void {
+    if (!entry.flags) return;
+    
+    if (Array.isArray(entry.flags)) {
+      entry.flags = entry.flags.filter((flag: string) => flag !== flagName);
+    } else {
+      delete entry.flags[flagName];
+    }
+  }
+
+  private normalizeFlags(flags: any): string[] | Record<string, boolean> {
+    if (!flags) return [];
+    
+    // If it's already an array or object, return as is
+    if (Array.isArray(flags) || typeof flags === 'object') {
+      return flags;
+    }
+    
+    // If it's a string, convert to array
+    if (typeof flags === 'string') {
+      return [flags];
+    }
+    
+    return [];
   }
 } 

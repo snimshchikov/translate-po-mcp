@@ -3,7 +3,7 @@ export interface TranslationEntry {
   msgstr: string;
   msgctxt?: string;
   comments?: string[];
-  flags?: string[];
+  flags?: string[] | Record<string, boolean>;
   references?: string[];
   obsolete?: boolean;
 }
