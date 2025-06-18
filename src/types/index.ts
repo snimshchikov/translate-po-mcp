@@ -14,6 +14,7 @@ export interface POFile {
   headers: Record<string, string | undefined>;
   entries: TranslationEntry[];
   lastModified: Date;
+  originalPO: any; // Keep reference to original PO object for proper saving
 }
 
 export interface TranslationSearchResult {
@@ -42,6 +43,7 @@ export interface SearchOptions {
   includeUntranslated?: boolean;
   includeTranslated?: boolean;
   includeFuzzy?: boolean;
+  limit?: number;
 }
 
 export interface UpdateTranslationRequest {
@@ -49,6 +51,10 @@ export interface UpdateTranslationRequest {
   msgid: string;
   msgstr: string | string[];
   msgctxt?: string;
+}
+
+export interface LimitOptions {
+  limit?: number;
 }
 
 export interface ExtractOptions {

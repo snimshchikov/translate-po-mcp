@@ -96,6 +96,10 @@ class TranslatePOMCPServer {
                   description: 'Include fuzzy translations',
                   default: true,
                 },
+                limit: {
+                  type: 'number',
+                  description: 'Maximum number of results to return',
+                },
               },
               required: ['query', 'searchIn'],
             },
@@ -110,6 +114,10 @@ class TranslatePOMCPServer {
                   type: 'string',
                   description: 'Optional file path to filter results',
                 },
+                limit: {
+                  type: 'number',
+                  description: 'Maximum number of results to return',
+                },
               },
             },
           },
@@ -122,6 +130,10 @@ class TranslatePOMCPServer {
                 filePath: {
                   type: 'string',
                   description: 'Optional file path to filter results',
+                },
+                limit: {
+                  type: 'number',
+                  description: 'Maximum number of results to return',
                 },
               },
             },
@@ -215,6 +227,10 @@ class TranslatePOMCPServer {
                   type: 'string',
                   description: 'Path to the .po file',
                 },
+                limit: {
+                  type: 'number',
+                  description: 'Maximum number of results to return',
+                },
               },
               required: ['filePath'],
             },
@@ -275,26 +291,30 @@ class TranslatePOMCPServer {
           }
 
           case 'get_untranslated_strings': {
-            const { filePath } = args as { filePath?: string };
-            const results = this.translationService.getUntranslatedStrings(filePath);
+            const { filePath, limit } = args as { filePath?: string; limit?: number };
+            const limitOptions = limit !== undefined ? { limit } : undefined;
+            const results = this.translationService.getUntranslatedStrings(filePath, limitOptions);
+            const totalText = limit !== undefined ? ` (showing ${results.length}, limited to ${limit})` : '';
             return {
               content: [
                 {
                   type: 'text',
-                  text: `Found ${results.length} untranslated strings:\n${JSON.stringify(results, null, 2)}`,
+                  text: `Found ${results.length} untranslated strings${totalText}:\n${JSON.stringify(results, null, 2)}`,
                 },
               ],
             };
           }
 
           case 'get_fuzzy_translations': {
-            const { filePath } = args as { filePath?: string };
-            const results = this.translationService.getFuzzyTranslations(filePath);
+            const { filePath, limit } = args as { filePath?: string; limit?: number };
+            const limitOptions = limit !== undefined ? { limit } : undefined;
+            const results = this.translationService.getFuzzyTranslations(filePath, limitOptions);
+            const totalText = limit !== undefined ? ` (showing ${results.length}, limited to ${limit})` : '';
             return {
               content: [
                 {
                   type: 'text',
-                  text: `Found ${results.length} fuzzy translations:\n${JSON.stringify(results, null, 2)}`,
+                  text: `Found ${results.length} fuzzy translations${totalText}:\n${JSON.stringify(results, null, 2)}`,
                 },
               ],
             };
@@ -370,13 +390,15 @@ class TranslatePOMCPServer {
           }
 
           case 'get_file_translations': {
-            const { filePath } = args as { filePath: string };
-            const translations = this.translationService.getTranslationsForFile(filePath);
+            const { filePath, limit } = args as { filePath: string; limit?: number };
+            const limitOptions = limit !== undefined ? { limit } : undefined;
+            const translations = this.translationService.getTranslationsForFile(filePath, limitOptions);
+            const totalText = limit !== undefined ? ` (showing ${translations.length}, limited to ${limit})` : '';
             return {
               content: [
                 {
                   type: 'text',
-                  text: `Translations in ${filePath} (${translations.length} entries):\n${JSON.stringify(translations, null, 2)}`,
+                  text: `Translations in ${filePath} (${translations.length} entries${totalText}):\n${JSON.stringify(translations, null, 2)}`,
                 },
               ],
             };

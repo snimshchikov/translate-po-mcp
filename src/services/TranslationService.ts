@@ -6,7 +6,8 @@ import {
   TranslationSearchResult, 
   TranslationStats,
   UpdateTranslationRequest,
-  POFile
+  POFile,
+  LimitOptions
 } from '../types/index.js';
 
 export class TranslationService {
@@ -54,13 +55,14 @@ export class TranslationService {
     return result;
   }
 
-  public getUntranslatedStrings(filePath?: string): TranslationEntry[] {
+  public getUntranslatedStrings(filePath?: string, options?: LimitOptions): TranslationEntry[] {
     const searchOptions: SearchOptions = {
       query: '',
       searchIn: 'msgid',
       includeUntranslated: true,
       includeTranslated: false,
-      includeFuzzy: false
+      includeFuzzy: false,
+      ...(options?.limit !== undefined && { limit: options.limit })
     };
 
     const results = this.poFileService.searchTranslations(searchOptions);
@@ -74,13 +76,14 @@ export class TranslationService {
     return results.map(result => result.entry);
   }
 
-  public getFuzzyTranslations(filePath?: string): TranslationEntry[] {
+  public getFuzzyTranslations(filePath?: string, options?: LimitOptions): TranslationEntry[] {
     const searchOptions: SearchOptions = {
       query: '',
       searchIn: 'msgid',
       includeUntranslated: false,
       includeTranslated: false,
-      includeFuzzy: true
+      includeFuzzy: true,
+      ...(options?.limit !== undefined && { limit: options.limit })
     };
 
     const results = this.poFileService.searchTranslations(searchOptions);
@@ -150,13 +153,14 @@ export class TranslationService {
     return this.poFileService.isFileLoaded(filePath);
   }
 
-  public getTranslationsForFile(filePath: string): TranslationEntry[] {
+  public getTranslationsForFile(filePath: string, options?: LimitOptions): TranslationEntry[] {
     const searchOptions: SearchOptions = {
       query: '',
       searchIn: 'msgid',
       includeUntranslated: true,
       includeTranslated: true,
-      includeFuzzy: true
+      includeFuzzy: true,
+      ...(options?.limit !== undefined && { limit: options.limit })
     };
 
     return this.poFileService

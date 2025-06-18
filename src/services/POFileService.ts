@@ -36,7 +36,8 @@ export class POFileService {
         path: absolutePath,
         headers: po.headers,
         entries,
-        lastModified: stats.mtime
+        lastModified: stats.mtime,
+        originalPO: po // Keep reference to original PO object
       };
 
       this.loadedFiles.set(absolutePath, poFile);
@@ -63,41 +64,27 @@ export class POFileService {
     }
 
     try {
-      const po = new PO();
-      po.headers = poFile.headers;
-
-      poFile.entries.forEach(entry => {
-        // Try multiple approaches to create PO item to handle different library versions
-        let item: any;
-        
-        try {
-          // Approach 1: Try PO.Item()
-          item = new (PO as any).Item();
-        } catch {
-          try {
-            // Approach 2: Try PO.PO.Item()
-            item = new (PO as any).PO.Item();
-          } catch {
-            // Approach 3: Create plain object (fallback)
-            item = {};
-          }
-        }
-
-        item.msgid = entry.msgid;
-        // Handle pluralization properly
-        if (Array.isArray(entry.msgstr)) {
-          item.msgstr = entry.msgstr; // Keep array for plural forms
-        } else {
-          item.msgstr = entry.msgstr; // Single string
-        }
-        if (entry.msgid_plural) item.msgid_plural = entry.msgid_plural;
-        if (entry.msgctxt) item.msgctxt = entry.msgctxt;
-        if (entry.comments) item.extractedComments = entry.comments;
-        if (entry.flags) item.flags = entry.flags;
-        if (entry.references) item.references = entry.references;
-        if (entry.obsolete) item.obsolete = entry.obsolete;
-        po.items.push(item);
-      });
+      // Use the original PO object to preserve formatting and metadata
+      const po = poFile.originalPO;
+      
+             // Update the items in the original PO object with our modified entries
+       po.items.forEach((item: any, index: number) => {
+         if (index < poFile.entries.length) {
+           const entry = poFile.entries[index]!; // Use non-null assertion since we check bounds above
+           
+           // Only update msgstr and flags (the parts we actually modify)
+           if (Array.isArray(entry.msgstr)) {
+             item.msgstr = [...entry.msgstr]; // Copy array for plural forms
+           } else {
+             item.msgstr = entry.msgstr;
+           }
+           
+           // Update flags if they exist
+           if (entry.flags) {
+             item.flags = entry.flags;
+           }
+         }
+       });
 
       await fs.writeFile(poFile.path, po.toString(), 'utf-8');
     } catch (error) {
@@ -107,7 +94,7 @@ export class POFileService {
 
   public searchTranslations(options: SearchOptions): TranslationSearchResult[] {
     const results: TranslationSearchResult[] = [];
-    const { query, searchIn, caseSensitive = false, regex = false } = options;
+    const { query, searchIn, caseSensitive = false, regex = false, limit } = options;
 
     let searchPattern: RegExp;
     try {
@@ -141,6 +128,11 @@ export class POFileService {
           });
         }
       });
+    }
+
+    // Apply limit if specified
+    if (limit !== undefined) {
+      return results.slice(0, limit);
     }
 
     return results;
