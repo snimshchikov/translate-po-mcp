@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "translate-po": {
+      "command": "node",
+      "args": ["./node_modules/translate-po-mcp/dist/index.js"],
+      "cwd": ".",
+      "env": {}
+    }
+  }
+} 

@@ -1,0 +1,58 @@
+export interface TranslationEntry {
+  msgid: string;
+  msgstr: string;
+  msgctxt?: string;
+  comments?: string[];
+  flags?: string[];
+  references?: string[];
+  obsolete?: boolean;
+}
+
+export interface POFile {
+  path: string;
+  headers: Record<string, string | undefined>;
+  entries: TranslationEntry[];
+  lastModified: Date;
+}
+
+export interface TranslationSearchResult {
+  entry: TranslationEntry;
+  file: string;
+  lineNumber?: number;
+}
+
+export interface TranslationsByFile {
+  [filePath: string]: TranslationEntry[];
+}
+
+export interface TranslationStats {
+  total: number;
+  translated: number;
+  untranslated: number;
+  fuzzy: number;
+  obsolete: number;
+}
+
+export interface SearchOptions {
+  query: string;
+  searchIn: 'msgid' | 'msgstr' | 'both';
+  caseSensitive?: boolean;
+  regex?: boolean;
+  includeUntranslated?: boolean;
+  includeTranslated?: boolean;
+  includeFuzzy?: boolean;
+}
+
+export interface UpdateTranslationRequest {
+  filePath: string;
+  msgid: string;
+  msgstr: string;
+  msgctxt?: string;
+}
+
+export interface ExtractOptions {
+  sourceDirectories: string[];
+  outputPath: string;
+  filePatterns: string[];
+  keywords?: string[];
+} 

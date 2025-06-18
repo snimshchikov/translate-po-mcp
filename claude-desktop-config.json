@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "translate-po": {
+      "command": "node",
+      "args": ["C:\\Users\\Admin\\Documents\\vscodium\\translate-po-mcp\\dist\\index.js"],
+      "cwd": "C:\\Users\\Admin\\Documents\\vscodium\\translate-po-mcp"
+    }
+  }
+} 

@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "translate-po": {
+      "command": "translate-po-mcp",
+      "args": [],
+      "cwd": ".",
+      "env": {}
+    }
+  }
+} 
