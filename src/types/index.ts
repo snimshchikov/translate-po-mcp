@@ -1,6 +1,7 @@
 export interface TranslationEntry {
   msgid: string;
-  msgstr: string;
+  msgstr: string | string[]; // Support both singular and plural forms
+  msgid_plural?: string; // For plural entries
   msgctxt?: string;
   comments?: string[];
   flags?: string[] | Record<string, boolean>;
@@ -46,7 +47,7 @@ export interface SearchOptions {
 export interface UpdateTranslationRequest {
   filePath: string;
   msgid: string;
-  msgstr: string;
+  msgstr: string | string[];
   msgctxt?: string;
 }
 

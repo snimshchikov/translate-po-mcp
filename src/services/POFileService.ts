@@ -23,7 +23,8 @@ export class POFileService {
 
       const entries: TranslationEntry[] = po.items.map((item: any) => ({
         msgid: item.msgid,
-        msgstr: Array.isArray(item.msgstr) ? item.msgstr.join('') : item.msgstr,
+        msgstr: this.normalizeMsgstr(item.msgstr),
+        msgid_plural: item.msgid_plural || undefined,
         msgctxt: item.msgctxt ? item.msgctxt : undefined,
         comments: item.extractedComments || [],
         flags: this.normalizeFlags(item.flags),
@@ -83,7 +84,13 @@ export class POFileService {
         }
 
         item.msgid = entry.msgid;
-        item.msgstr = entry.msgstr;
+        // Handle pluralization properly
+        if (Array.isArray(entry.msgstr)) {
+          item.msgstr = entry.msgstr; // Keep array for plural forms
+        } else {
+          item.msgstr = entry.msgstr; // Single string
+        }
+        if (entry.msgid_plural) item.msgid_plural = entry.msgid_plural;
         if (entry.msgctxt) item.msgctxt = entry.msgctxt;
         if (entry.comments) item.extractedComments = entry.comments;
         if (entry.flags) item.flags = entry.flags;
@@ -124,7 +131,7 @@ export class POFileService {
           matches = searchPattern.test(entry.msgid);
         }
         if (!matches && (searchIn === 'msgstr' || searchIn === 'both')) {
-          matches = searchPattern.test(entry.msgstr);
+          matches = searchPattern.test(this.getMsgstrAsString(entry.msgstr));
         }
 
         if (matches) {
@@ -168,7 +175,7 @@ export class POFileService {
         stats.obsolete++;
       } else if (this.hasFlag(entry.flags, 'fuzzy')) {
         stats.fuzzy++;
-      } else if (entry.msgstr && entry.msgstr.trim() !== '') {
+      } else if (this.getMsgstrAsString(entry.msgstr).trim() !== '') {
         stats.translated++;
       } else {
         stats.untranslated++;
@@ -214,7 +221,7 @@ export class POFileService {
     if (entry.obsolete) return false;
 
     const isFuzzy = this.hasFlag(entry.flags, 'fuzzy');
-    const isTranslated = entry.msgstr && entry.msgstr.trim() !== '';
+    const isTranslated = this.getMsgstrAsString(entry.msgstr).trim() !== '';
 
     if (isFuzzy && !includeFuzzy) return false;
     if (isTranslated && !isFuzzy && !includeTranslated) return false;
@@ -257,5 +264,25 @@ export class POFileService {
     }
     
     return [];
+  }
+
+  private normalizeMsgstr(msgstr: any): string | string[] {
+    if (!msgstr) return '';
+    
+    // If it's an array (plural forms), keep as array but clean each string
+    if (Array.isArray(msgstr)) {
+      return msgstr.map(str => (typeof str === 'string' ? str : String(str)));
+    }
+    
+    // If it's a string, return as is
+    return typeof msgstr === 'string' ? msgstr : String(msgstr);
+  }
+
+  private getMsgstrAsString(msgstr: string | string[]): string {
+    if (Array.isArray(msgstr)) {
+      // For plural forms, return the first form (singular) or join if needed
+      return msgstr[0] || '';
+    }
+    return msgstr || '';
   }
 } 
