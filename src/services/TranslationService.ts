@@ -24,6 +24,10 @@ export class TranslationService {
 
 
   public getUntranslatedStrings(filePath?: string, options?: LimitOptions): TranslationEntry[] {
+    if (this.poFileService.getLoadedFiles().length === 0) {
+      throw new Error(`No files loaded. Use load_po_file first.`);
+    }
+
     const searchOptions: SearchOptions = {
       query: '',
       searchIn: 'msgid',
@@ -36,15 +40,31 @@ export class TranslationService {
     const results = this.poFileService.searchTranslations(searchOptions);
     
     if (filePath) {
-      return results
+      if (!this.poFileService.isFileLoaded(filePath)) {
+        throw new Error(`File not loaded: ${filePath}. Use load_po_file first.`);
+      }
+      const filtered = results
         .filter(result => result.file === filePath)
         .map(result => result.entry);
+      
+      if (filtered.length === 0) {
+        throw new Error(`No untranslated strings found in ${filePath}.`);
+      }
+      return filtered;
     }
 
-    return results.map(result => result.entry);
+    const entries = results.map(result => result.entry);
+    if (entries.length === 0) {
+      throw new Error(`No untranslated strings found in loaded files.`);
+    }
+    return entries;
   }
 
   public getFuzzyTranslations(filePath?: string, options?: LimitOptions): TranslationEntry[] {
+    if (this.poFileService.getLoadedFiles().length === 0) {
+      throw new Error(`No files loaded. Use load_po_file first.`);
+    }
+
     const searchOptions: SearchOptions = {
       query: '',
       searchIn: 'msgid',
@@ -57,12 +77,24 @@ export class TranslationService {
     const results = this.poFileService.searchTranslations(searchOptions);
     
     if (filePath) {
-      return results
+      if (!this.poFileService.isFileLoaded(filePath)) {
+        throw new Error(`File not loaded: ${filePath}. Use load_po_file first.`);
+      }
+      const filtered = results
         .filter(result => result.file === filePath)
         .map(result => result.entry);
+      
+      if (filtered.length === 0) {
+        throw new Error(`No fuzzy translations found in ${filePath}.`);
+      }
+      return filtered;
     }
 
-    return results.map(result => result.entry);
+    const entries = results.map(result => result.entry);
+    if (entries.length === 0) {
+      throw new Error(`No fuzzy translations found in loaded files.`);
+    }
+    return entries;
   }
 
 
@@ -120,6 +152,10 @@ export class TranslationService {
   }
 
   public getTranslationsForFile(filePath: string, options?: LimitOptions): TranslationEntry[] {
+    if (!this.poFileService.isFileLoaded(filePath)) {
+      throw new Error(`File not loaded: ${filePath}. Use load_po_file first.`);
+    }
+
     const searchOptions: SearchOptions = {
       query: '',
       searchIn: 'msgid',
@@ -129,9 +165,15 @@ export class TranslationService {
       ...(options?.limit !== undefined && { limit: options.limit })
     };
 
-    return this.poFileService
+    const results = this.poFileService
       .searchTranslations(searchOptions)
       .filter(result => result.file === filePath)
       .map(result => result.entry);
+
+    if (results.length === 0) {
+      throw new Error(`No translations found in ${filePath}.`);
+    }
+
+    return results;
   }
 } 

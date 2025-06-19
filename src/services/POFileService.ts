@@ -42,6 +42,14 @@ export class POFileService {
       this.loadedFiles.set(absolutePath, poFile);
       return poFile;
     } catch (error) {
+      if (error instanceof Error) {
+        if ((error as any).code === 'ENOENT') {
+          throw new Error(`File not found: ${filePath}. Use load_po_file with correct file path first.`);
+        }
+        if (error.message.includes('Unexpected token')) {
+          throw new Error(`Invalid PO file format: ${filePath}. Check file syntax.`);
+        }
+      }
       throw new Error(`Failed to load PO file ${filePath}: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -59,7 +67,7 @@ export class POFileService {
     public async savePOFile(filePath: string): Promise<void> {
     const poFile = this.loadedFiles.get(path.resolve(filePath));
     if (!poFile) {
-      throw new Error(`PO file ${filePath} is not loaded`);
+      throw new Error(`File not loaded: ${filePath}. Use load_po_file first.`);
     }
 
     try {
@@ -230,11 +238,14 @@ export class POFileService {
     if (filePath) {
       const poFile = this.loadedFiles.get(path.resolve(filePath));
       if (!poFile) {
-        throw new Error(`PO file ${filePath} is not loaded`);
+        throw new Error(`File not loaded: ${filePath}. Use load_po_file first.`);
       }
       entries = poFile.entries;
     } else {
       // Get stats for all loaded files
+      if (this.loadedFiles.size === 0) {
+        throw new Error(`No files loaded. Use load_po_file first.`);
+      }
       for (const poFile of this.loadedFiles.values()) {
         entries.push(...poFile.entries);
       }
@@ -266,7 +277,7 @@ export class POFileService {
   public updateTranslation(request: UpdateTranslationRequest): boolean {
     const poFile = this.loadedFiles.get(path.resolve(request.filePath));
     if (!poFile) {
-      throw new Error(`PO file ${request.filePath} is not loaded`);
+      throw new Error(`File not loaded: ${request.filePath}. Use load_po_file first.`);
     }
 
     const entryIndex = poFile.entries.findIndex(entry => 
@@ -275,7 +286,7 @@ export class POFileService {
     );
 
     if (entryIndex === -1) {
-      return false;
+      throw new Error(`Translation not found: "${request.msgid}". Check msgid and msgctxt.`);
     }
 
     poFile.entries[entryIndex]!.msgstr = request.msgstr;

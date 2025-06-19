@@ -282,6 +282,16 @@ class TranslatePOMCPServer {
 
           case 'get_loaded_files': {
             const files = this.translationService.getLoadedFiles();
+            if (files.length === 0) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: `No files loaded. Use load_po_file to load a .po file first.`,
+                  },
+                ],
+              };
+            }
             return {
               content: [
                 {
