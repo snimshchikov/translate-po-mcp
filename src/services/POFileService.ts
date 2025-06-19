@@ -1,5 +1,7 @@
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
 import { glob } from 'glob';
 import PO from 'pofile';
 import { 
@@ -10,6 +12,8 @@ import {
   TranslationStats,
   UpdateTranslationRequest 
 } from '../types/index.js';
+
+const execAsync = promisify(exec);
 
 export class POFileService {
   private loadedFiles: Map<string, POFile> = new Map();
@@ -64,127 +68,151 @@ export class POFileService {
     }
   }
 
-    public async savePOFile(filePath: string): Promise<void> {
+  public async savePOFile(filePath: string): Promise<void> {
     const poFile = this.loadedFiles.get(path.resolve(filePath));
     if (!poFile) {
       throw new Error(`File not loaded: ${filePath}. Use load_po_file first.`);
     }
 
     try {
-      // Read the original file content to preserve exact formatting
-      const originalContent = await fs.readFile(poFile.path, 'utf-8');
-      const lines = originalContent.split('\n');
+      // Create a new PO object and populate it with updated translations
+      const po = new PO();
       
-      // Create a map of msgid -> updated entry for easy lookup
-      const updatedEntries = new Map<string, TranslationEntry>();
+      // Copy headers from the original file
+      po.headers = { ...poFile.headers };
+      
+      // Add all entries to the PO object
       poFile.entries.forEach(entry => {
-        const key = entry.msgctxt ? `${entry.msgctxt}\x04${entry.msgid}` : entry.msgid;
-        updatedEntries.set(key, entry);
+        const item = new (PO as any).Item();
+        item.msgid = entry.msgid;
+        item.msgstr = entry.msgstr;
+        
+        if (entry.msgid_plural) {
+          item.msgid_plural = entry.msgid_plural;
+        }
+        
+        if (entry.msgctxt) {
+          item.msgctxt = entry.msgctxt;
+        }
+        
+        if (entry.comments && entry.comments.length > 0) {
+          item.extractedComments = entry.comments;
+        }
+        
+        if (entry.references && entry.references.length > 0) {
+          item.references = entry.references;
+        }
+        
+        if (entry.flags) {
+          if (Array.isArray(entry.flags)) {
+            entry.flags.forEach(flag => {
+              if (!item.flags) item.flags = {};
+              item.flags[flag] = true;
+            });
+          } else {
+            item.flags = { ...entry.flags };
+          }
+        }
+        
+        if (entry.obsolete) {
+          item.obsolete = entry.obsolete;
+        }
+        
+        po.items.push(item);
       });
 
-      let currentMsgid = '';
-      let currentMsgctxt = '';
-      let inMsgstr = false;
-      let msgstrLineIndex = -1;
+      // Save the PO file using the pofile library
+      await fs.writeFile(poFile.path, po.toString(), 'utf-8');
       
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        if (!line) continue; // Skip undefined lines
-        
-        // Track current msgctxt
-        if (line.startsWith('msgctxt ')) {
-          currentMsgctxt = this.extractQuotedString(line.substring(8));
-          inMsgstr = false;
-        }
-        
-        // Track current msgid
-        if (line.startsWith('msgid ')) {
-          currentMsgid = this.extractQuotedString(line.substring(6));
-          inMsgstr = false;
-        }
-        
-        // When we hit msgstr, check if we need to update it
-        if (line.startsWith('msgstr')) {
-          const key = currentMsgctxt ? `${currentMsgctxt}\x04${currentMsgid}` : currentMsgid;
-          const updatedEntry = updatedEntries.get(key);
-          
-          if (updatedEntry) {
-            // Check if the original was plural (has msgstr[0], msgstr[1], etc.)
-            const originalWasPlural = line.startsWith('msgstr[');
-            
-            // Replace the msgstr line(s) with our updated translation
-            if (Array.isArray(updatedEntry.msgstr) && originalWasPlural) {
-              // Handle plural forms - only if original was plural
-              const pluralLines: string[] = [];
-              updatedEntry.msgstr.forEach((str, idx) => {
-                pluralLines.push(`msgstr[${idx}] "${this.escapeString(str)}"`);
-              });
-              
-              // Find how many msgstr lines to replace
-              let endIndex = i;
-              while (endIndex + 1 < lines.length) {
-                const nextLine = lines[endIndex + 1];
-                if (nextLine && (nextLine.startsWith('msgstr[') || nextLine.startsWith('"'))) {
-                  endIndex++;
-                } else {
-                  break;
-                }
-              }
-              
-              // Replace the msgstr section
-              lines.splice(i, endIndex - i + 1, ...pluralLines);
-              i += pluralLines.length - 1; // Adjust index
-            } else {
-              // Handle singular form - use the first element if it's an array, or the string directly
-              const translationText = Array.isArray(updatedEntry.msgstr) 
-                ? updatedEntry.msgstr[0] || ''
-                : updatedEntry.msgstr;
-              
-              lines[i] = `msgstr "${this.escapeString(translationText)}"`;
-              
-              // Remove any continuation lines that might exist
-              while (i + 1 < lines.length) {
-                const nextLine = lines[i + 1];
-                if (nextLine && nextLine.startsWith('"')) {
-                  lines.splice(i + 1, 1);
-                } else {
-                  break;
-                }
-              }
-            }
-          }
-          
-          inMsgstr = true;
-          msgstrLineIndex = i;
-        }
-        
-        // Reset context when we hit a new entry
-        if (line.trim() === '' && inMsgstr) {
-          currentMsgid = '';
-          currentMsgctxt = '';
-          inMsgstr = false;
-        }
-      }
-
-      await fs.writeFile(poFile.path, lines.join('\n'), 'utf-8');
+      // Now run pybabel update to properly format the file
+      await this.runPyBabelUpdate(poFile.path);
+      
+      // Reload the file to get the properly formatted version
+      await this.loadPOFile(filePath);
     } catch (error) {
       throw new Error(`Failed to save PO file ${filePath}: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-     private extractQuotedString(quotedStr: string): string {
-     // Remove quotes and handle escaped characters
-     const match = quotedStr.match(/^"(.*)"$/);
-     if (match && match[1] !== undefined) {
-       return match[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-     }
-     return quotedStr;
-   }
-
-  private escapeString(str: string): string {
-    // Escape quotes and backslashes for PO format
-    return str.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  private async runPyBabelUpdate(poFilePath: string): Promise<void> {
+    try {
+      // Extract the directory structure to find locales directory and POT file
+      const poDir = path.dirname(poFilePath);
+      const fileName = path.basename(poFilePath);
+      
+      // Common patterns for locales directory structure:
+      // 1. locales/lang/LC_MESSAGES/messages.po
+      // 2. locales/lang/messages.po
+      // 3. lang/LC_MESSAGES/messages.po
+      
+      let localesDir = '';
+      let domain = '';
+      let potFile = '';
+      
+      // Try to detect the structure
+      if (poDir.includes('locales')) {
+        // Find the locales directory
+        const parts = poDir.split(path.sep);
+        const localesIndex = parts.findIndex(part => part === 'locales');
+        if (localesIndex >= 0) {
+          localesDir = parts.slice(0, localesIndex + 1).join(path.sep);
+          domain = path.parse(fileName).name; // e.g., 'messages' from 'messages.po'
+          potFile = path.join(localesDir, `${domain}.pot`);
+        }
+      }
+      
+      // If we couldn't detect the structure, try some common defaults
+      if (!localesDir) {
+        // Look for a locales directory in parent directories
+        let currentDir = poDir;
+        for (let i = 0; i < 5; i++) {
+          const testLocalesDir = path.join(currentDir, 'locales');
+          try {
+            const stat = await fs.stat(testLocalesDir);
+            if (stat.isDirectory()) {
+              localesDir = testLocalesDir;
+              domain = path.parse(fileName).name;
+              potFile = path.join(localesDir, `${domain}.pot`);
+              break;
+            }
+          } catch {
+            // Directory doesn't exist, try parent
+            currentDir = path.dirname(currentDir);
+          }
+        }
+      }
+      
+      // Only run pybabel if we found a proper structure
+      if (localesDir && domain) {
+        // Check if POT file exists
+        try {
+          await fs.access(potFile);
+          
+          // Run pybabel update command
+          const command = `pybabel update -d "${localesDir}" -D ${domain} -i "${potFile}"`;
+          
+          const { stdout, stderr } = await execAsync(command, {
+            cwd: path.dirname(localesDir)
+          });
+          
+          if (stderr && !stderr.includes('updating catalog')) {
+            console.warn(`pybabel update warning: ${stderr}`);
+          }
+          
+        } catch (error) {
+          // POT file doesn't exist or pybabel command failed
+          // This is not necessarily an error - just log it
+          console.warn(`pybabel update skipped: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+      }
+      
+    } catch (error) {
+      // Don't throw here - pybabel formatting is optional
+      console.warn(`pybabel update failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
+
+
 
   public searchTranslations(options: SearchOptions): TranslationSearchResult[] {
     const results: TranslationSearchResult[] = [];
