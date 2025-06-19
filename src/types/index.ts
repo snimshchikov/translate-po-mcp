@@ -22,9 +22,7 @@ export interface TranslationSearchResult {
   lineNumber?: number;
 }
 
-export interface TranslationsByFile {
-  [filePath: string]: TranslationEntry[];
-}
+
 
 export interface TranslationStats {
   total: number;
@@ -56,9 +54,4 @@ export interface LimitOptions {
   limit?: number;
 }
 
-export interface ExtractOptions {
-  sourceDirectories: string[];
-  outputPath: string;
-  filePatterns: string[];
-  keywords?: string[];
-} 
+ 

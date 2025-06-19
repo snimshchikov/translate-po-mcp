@@ -1,9 +1,7 @@
 import { POFileService } from './POFileService.js';
 import { 
   TranslationEntry, 
-  TranslationsByFile, 
-  SearchOptions, 
-  TranslationSearchResult, 
+  SearchOptions,
   TranslationStats,
   UpdateTranslationRequest,
   POFile,
@@ -17,43 +15,13 @@ export class TranslationService {
     this.poFileService = new POFileService();
   }
 
-  public async loadTranslationProject(directory: string): Promise<string[]> {
-    const poFiles = await this.poFileService.findPOFiles(directory);
-    const loadedFiles: string[] = [];
 
-    for (const filePath of poFiles) {
-      try {
-        await this.poFileService.loadPOFile(filePath);
-        loadedFiles.push(filePath);
-      } catch (error) {
-        console.warn(`Failed to load ${filePath}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      }
-    }
-
-    return loadedFiles;
-  }
 
   public async loadSingleFile(filePath: string): Promise<POFile> {
     return await this.poFileService.loadPOFile(filePath);
   }
 
-  public getTranslationsByFile(): TranslationsByFile {
-    const result: TranslationsByFile = {};
-    const loadedFiles = this.poFileService.getLoadedFiles();
 
-    for (const filePath of loadedFiles) {
-      try {
-        const poFile = this.poFileService.loadPOFile(filePath);
-        // This is synchronous because file is already loaded
-        result[filePath] = (poFile as any).entries || [];
-      } catch (error) {
-        console.warn(`Failed to get translations for ${filePath}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        result[filePath] = [];
-      }
-    }
-
-    return result;
-  }
 
   public getUntranslatedStrings(filePath?: string, options?: LimitOptions): TranslationEntry[] {
     const searchOptions: SearchOptions = {
@@ -97,9 +65,7 @@ export class TranslationService {
     return results.map(result => result.entry);
   }
 
-  public searchTranslations(options: SearchOptions): TranslationSearchResult[] {
-    return this.poFileService.searchTranslations(options);
-  }
+
 
   public async updateTranslation(request: UpdateTranslationRequest): Promise<boolean> {
     const success = this.poFileService.updateTranslation(request);

@@ -8,7 +8,7 @@ import {
   Tool,
 } from '@modelcontextprotocol/sdk/types.js';
 import { TranslationService } from './services/TranslationService.js';
-import { SearchOptions, UpdateTranslationRequest } from './types/index.js';
+import { UpdateTranslationRequest } from './types/index.js';
 
 class TranslatePOMCPServer {
   private server: Server;
@@ -42,68 +42,8 @@ class TranslatePOMCPServer {
               required: ['filePath'],
             },
           },
-          {
-            name: 'load_translation_project',
-            description: 'Load all .po files from a directory and subdirectories',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                directory: {
-                  type: 'string',
-                  description: 'Directory path to search for .po files',
-                },
-              },
-              required: ['directory'],
-            },
-          },
-          {
-            name: 'search_translations',
-            description: 'Search for translations using various criteria',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                query: {
-                  type: 'string',
-                  description: 'Search query',
-                },
-                searchIn: {
-                  type: 'string',
-                  enum: ['msgid', 'msgstr', 'both'],
-                  description: 'Where to search (original text, translation, or both)',
-                },
-                caseSensitive: {
-                  type: 'boolean',
-                  description: 'Whether search should be case sensitive',
-                  default: false,
-                },
-                regex: {
-                  type: 'boolean',
-                  description: 'Whether query is a regular expression',
-                  default: false,
-                },
-                includeUntranslated: {
-                  type: 'boolean',
-                  description: 'Include untranslated strings',
-                  default: true,
-                },
-                includeTranslated: {
-                  type: 'boolean',
-                  description: 'Include translated strings',
-                  default: true,
-                },
-                includeFuzzy: {
-                  type: 'boolean',
-                  description: 'Include fuzzy translations',
-                  default: true,
-                },
-                limit: {
-                  type: 'number',
-                  description: 'Maximum number of results to return',
-                },
-              },
-              required: ['query', 'searchIn'],
-            },
-          },
+
+
           {
             name: 'get_untranslated_strings',
             description: 'Get all untranslated strings from loaded files or a specific file',
@@ -202,22 +142,6 @@ class TranslatePOMCPServer {
             },
           },
           {
-            name: 'get_translations_by_file',
-            description: 'Get all translations grouped by file',
-            inputSchema: {
-              type: 'object',
-              properties: {},
-            },
-          },
-          {
-            name: 'get_loaded_files',
-            description: 'Get list of currently loaded .po files',
-            inputSchema: {
-              type: 'object',
-              properties: {},
-            },
-          },
-          {
             name: 'get_file_translations',
             description: 'Get all translations from a specific file',
             inputSchema: {
@@ -235,6 +159,15 @@ class TranslatePOMCPServer {
               required: ['filePath'],
             },
           },
+          {
+            name: 'get_loaded_files',
+            description: 'Get list of currently loaded .po files',
+            inputSchema: {
+              type: 'object',
+              properties: {},
+            },
+          },
+
         ] as Tool[],
       };
     });
@@ -257,38 +190,9 @@ class TranslatePOMCPServer {
             };
           }
 
-          case 'load_translation_project': {
-            const { directory } = args as { directory: string };
-            const loadedFiles = await this.translationService.loadTranslationProject(directory);
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: `Successfully loaded ${loadedFiles.length} PO files from ${directory}:\n${loadedFiles.join('\n')}`,
-                },
-              ],
-            };
-          }
 
-          case 'search_translations': {
-            const options = args as unknown as SearchOptions;
-            const results = this.translationService.searchTranslations(options);
-            const formattedResults = results.map(result => ({
-              file: result.file,
-              msgid: result.entry.msgid,
-              msgstr: result.entry.msgstr,
-              msgctxt: result.entry.msgctxt,
-              flags: result.entry.flags,
-            }));
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: `Found ${results.length} matches:\n${JSON.stringify(formattedResults, null, 2)}`,
-                },
-              ],
-            };
-          }
+
+
 
           case 'get_untranslated_strings': {
             const { filePath, limit } = args as { filePath?: string; limit?: number };
@@ -361,17 +265,16 @@ class TranslatePOMCPServer {
             };
           }
 
-          case 'get_translations_by_file': {
-            const result = this.translationService.getTranslationsByFile();
-            const summary = Object.entries(result).map(([file, entries]) => ({
-              file,
-              count: entries.length,
-            }));
+          case 'get_file_translations': {
+            const { filePath, limit } = args as { filePath: string; limit?: number };
+            const limitOptions = limit !== undefined ? { limit } : undefined;
+            const translations = this.translationService.getTranslationsForFile(filePath, limitOptions);
+            const totalText = limit !== undefined ? ` (showing ${translations.length}, limited to ${limit})` : '';
             return {
               content: [
                 {
                   type: 'text',
-                  text: `Translations by file:\n${JSON.stringify(summary, null, 2)}`,
+                  text: `Translations in ${filePath} (${translations.length} entries${totalText}):\n${JSON.stringify(translations, null, 2)}`,
                 },
               ],
             };
@@ -384,21 +287,6 @@ class TranslatePOMCPServer {
                 {
                   type: 'text',
                   text: `Loaded files (${files.length}):\n${files.join('\n')}`,
-                },
-              ],
-            };
-          }
-
-          case 'get_file_translations': {
-            const { filePath, limit } = args as { filePath: string; limit?: number };
-            const limitOptions = limit !== undefined ? { limit } : undefined;
-            const translations = this.translationService.getTranslationsForFile(filePath, limitOptions);
-            const totalText = limit !== undefined ? ` (showing ${translations.length}, limited to ${limit})` : '';
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: `Translations in ${filePath} (${translations.length} entries${totalText}):\n${JSON.stringify(translations, null, 2)}`,
                 },
               ],
             };
