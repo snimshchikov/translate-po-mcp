@@ -151,29 +151,79 @@ export class TranslationService {
     return this.poFileService.isFileLoaded(filePath);
   }
 
-  public getTranslationsForFile(filePath: string, options?: LimitOptions): TranslationEntry[] {
-    if (!this.poFileService.isFileLoaded(filePath)) {
-      throw new Error(`File not loaded: ${filePath}. Use load_po_file first.`);
+  public getTranslationsForFile(sourceFilePath: string, options?: { startLine?: number; endLine?: number }): TranslationEntry[] {
+    if (this.poFileService.getLoadedFiles().length === 0) {
+      throw new Error(`No files loaded. Use load_po_file first.`);
     }
 
+    // Get all translations from all loaded PO files
     const searchOptions: SearchOptions = {
       query: '',
       searchIn: 'msgid',
       includeUntranslated: true,
       includeTranslated: true,
-      includeFuzzy: true,
-      ...(options?.limit !== undefined && { limit: options.limit })
+      includeFuzzy: true
     };
 
-    const results = this.poFileService
-      .searchTranslations(searchOptions)
-      .filter(result => result.file === filePath)
-      .map(result => result.entry);
+    const allResults = this.poFileService.searchTranslations(searchOptions);
+    
+    // Filter by source file references (e.g., "bot/pm/admin.py:262")
+    const filteredEntries = allResults
+      .map(result => result.entry)
+      .filter(entry => {
+        if (!entry.references || entry.references.length === 0) {
+          return false;
+        }
+        
+        // Check if any reference contains the source file path
+        return entry.references.some(ref => {
+          // Extract file path from reference (e.g., "bot/pm/admin.py:262" -> "bot/pm/admin.py")
+          const refFilePath = ref.split(':')[0];
+          return refFilePath === sourceFilePath;
+        });
+      });
 
-    if (results.length === 0) {
-      throw new Error(`No translations found in ${filePath}.`);
+    if (filteredEntries.length === 0) {
+      throw new Error(`No translations found for source file: ${sourceFilePath}. Check file path in references.`);
     }
 
-    return results;
+    // Apply line number filtering if specified
+    if (options?.startLine !== undefined || options?.endLine !== undefined) {
+      const startLine = options.startLine || 1;
+      const endLine = options.endLine || Number.MAX_SAFE_INTEGER;
+      
+      const lineFilteredEntries = filteredEntries.filter(entry => {
+        if (!entry.references || entry.references.length === 0) {
+          return false;
+        }
+        
+                 // Check if any reference line number falls within the range
+         return entry.references.some(ref => {
+           const parts = ref.split(':');
+           if (parts.length < 2) return false;
+           
+           const refFilePath = parts[0];
+           const lineNumberStr = parts[1];
+           if (!refFilePath || !lineNumberStr) return false;
+           
+           const lineNumber = parseInt(lineNumberStr, 10);
+           
+           // Only check line numbers for the matching file
+           if (refFilePath === sourceFilePath && !isNaN(lineNumber)) {
+             return lineNumber >= startLine && lineNumber <= endLine;
+           }
+           
+           return false;
+         });
+      });
+
+      if (lineFilteredEntries.length === 0) {
+        throw new Error(`No translations found for ${sourceFilePath} between lines ${startLine}-${endLine}.`);
+      }
+      
+      return lineFilteredEntries;
+    }
+
+    return filteredEntries;
   }
 } 

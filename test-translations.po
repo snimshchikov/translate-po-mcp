@@ -1,0 +1,27 @@
+# Test PO file
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+
+#: bot/pm/admin.py:262
+msgid ""
+"❌ <b>Admin Topup Failed</b>\n"
+"\n"
+"Could not add transaction. Check logs for details."
+msgstr ""
+"❌ <b>Ошибка пополнения</b>\n"
+"\n"
+"Не удалось добавить транзакцию. Проверьте логи."
+
+#: bot/pm/cache_debug.py:30 bot/pm/my_gifts.py:95
+#, python-brace-format
+msgid "📊 <b>Total Gifts:</b> {total}\n"
+msgstr "📊 <b>Всего подарков:</b> {total}\n"
+
+#: bot/pm/admin.py:150
+msgid "Settings updated"
+msgstr "Настройки обновлены"
+
+#: bot/pm/other.py:10
+msgid "Other message"
+msgstr "Другое сообщение"

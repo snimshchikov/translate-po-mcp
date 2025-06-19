@@ -143,20 +143,24 @@ class TranslatePOMCPServer {
           },
           {
             name: 'get_file_translations',
-            description: 'Get all translations from a specific file',
+            description: 'Get translations that belong to a specific source file (based on #: references)',
             inputSchema: {
               type: 'object',
               properties: {
-                filePath: {
+                sourceFilePath: {
                   type: 'string',
-                  description: 'Path to the .po file',
+                  description: 'Source file path to search for (e.g., "bot/pm/admin.py")',
                 },
-                limit: {
+                startLine: {
                   type: 'number',
-                  description: 'Maximum number of results to return',
+                  description: 'Start line number to filter translations (inclusive)',
+                },
+                endLine: {
+                  type: 'number',
+                  description: 'End line number to filter translations (inclusive)',
                 },
               },
-              required: ['filePath'],
+              required: ['sourceFilePath'],
             },
           },
           {
@@ -266,15 +270,20 @@ class TranslatePOMCPServer {
           }
 
           case 'get_file_translations': {
-            const { filePath, limit } = args as { filePath: string; limit?: number };
-            const limitOptions = limit !== undefined ? { limit } : undefined;
-            const translations = this.translationService.getTranslationsForFile(filePath, limitOptions);
-            const totalText = limit !== undefined ? ` (showing ${translations.length}, limited to ${limit})` : '';
+            const { sourceFilePath, startLine, endLine } = args as { sourceFilePath: string; startLine?: number; endLine?: number };
+            const options = (startLine !== undefined || endLine !== undefined) ? {
+              ...(startLine !== undefined && { startLine }),
+              ...(endLine !== undefined && { endLine })
+            } : undefined;
+            const translations = this.translationService.getTranslationsForFile(sourceFilePath, options);
+            const lineRangeText = startLine !== undefined || endLine !== undefined 
+              ? ` (lines ${startLine || 1}-${endLine || '∞'})`
+              : '';
             return {
               content: [
                 {
                   type: 'text',
-                  text: `Translations in ${filePath} (${translations.length} entries${totalText}):\n${JSON.stringify(translations, null, 2)}`,
+                  text: `Translations for source file ${sourceFilePath}${lineRangeText} (${translations.length} entries):\n${JSON.stringify(translations, null, 2)}`,
                 },
               ],
             };
