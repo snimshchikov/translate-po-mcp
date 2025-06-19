@@ -14,7 +14,6 @@ export interface POFile {
   headers: Record<string, string | undefined>;
   entries: TranslationEntry[];
   lastModified: Date;
-  originalPO: any; // Keep reference to original PO object for proper saving
 }
 
 export interface TranslationSearchResult {

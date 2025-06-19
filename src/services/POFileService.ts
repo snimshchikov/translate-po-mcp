@@ -36,8 +36,7 @@ export class POFileService {
         path: absolutePath,
         headers: po.headers,
         entries,
-        lastModified: stats.mtime,
-        originalPO: po // Keep reference to original PO object
+        lastModified: stats.mtime
       };
 
       this.loadedFiles.set(absolutePath, poFile);
@@ -57,39 +56,126 @@ export class POFileService {
     }
   }
 
-  public async savePOFile(filePath: string): Promise<void> {
+    public async savePOFile(filePath: string): Promise<void> {
     const poFile = this.loadedFiles.get(path.resolve(filePath));
     if (!poFile) {
       throw new Error(`PO file ${filePath} is not loaded`);
     }
 
     try {
-      // Use the original PO object to preserve formatting and metadata
-      const po = poFile.originalPO;
+      // Read the original file content to preserve exact formatting
+      const originalContent = await fs.readFile(poFile.path, 'utf-8');
+      const lines = originalContent.split('\n');
       
-             // Update the items in the original PO object with our modified entries
-       po.items.forEach((item: any, index: number) => {
-         if (index < poFile.entries.length) {
-           const entry = poFile.entries[index]!; // Use non-null assertion since we check bounds above
-           
-           // Only update msgstr and flags (the parts we actually modify)
-           if (Array.isArray(entry.msgstr)) {
-             item.msgstr = [...entry.msgstr]; // Copy array for plural forms
-           } else {
-             item.msgstr = entry.msgstr;
-           }
-           
-           // Update flags if they exist
-           if (entry.flags) {
-             item.flags = entry.flags;
-           }
-         }
-       });
+      // Create a map of msgid -> updated entry for easy lookup
+      const updatedEntries = new Map<string, TranslationEntry>();
+      poFile.entries.forEach(entry => {
+        const key = entry.msgctxt ? `${entry.msgctxt}\x04${entry.msgid}` : entry.msgid;
+        updatedEntries.set(key, entry);
+      });
 
-      await fs.writeFile(poFile.path, po.toString(), 'utf-8');
+      let currentMsgid = '';
+      let currentMsgctxt = '';
+      let inMsgstr = false;
+      let msgstrLineIndex = -1;
+      
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (!line) continue; // Skip undefined lines
+        
+        // Track current msgctxt
+        if (line.startsWith('msgctxt ')) {
+          currentMsgctxt = this.extractQuotedString(line.substring(8));
+          inMsgstr = false;
+        }
+        
+        // Track current msgid
+        if (line.startsWith('msgid ')) {
+          currentMsgid = this.extractQuotedString(line.substring(6));
+          inMsgstr = false;
+        }
+        
+        // When we hit msgstr, check if we need to update it
+        if (line.startsWith('msgstr')) {
+          const key = currentMsgctxt ? `${currentMsgctxt}\x04${currentMsgid}` : currentMsgid;
+          const updatedEntry = updatedEntries.get(key);
+          
+          if (updatedEntry) {
+            // Check if the original was plural (has msgstr[0], msgstr[1], etc.)
+            const originalWasPlural = line.startsWith('msgstr[');
+            
+            // Replace the msgstr line(s) with our updated translation
+            if (Array.isArray(updatedEntry.msgstr) && originalWasPlural) {
+              // Handle plural forms - only if original was plural
+              const pluralLines: string[] = [];
+              updatedEntry.msgstr.forEach((str, idx) => {
+                pluralLines.push(`msgstr[${idx}] "${this.escapeString(str)}"`);
+              });
+              
+              // Find how many msgstr lines to replace
+              let endIndex = i;
+              while (endIndex + 1 < lines.length) {
+                const nextLine = lines[endIndex + 1];
+                if (nextLine && (nextLine.startsWith('msgstr[') || nextLine.startsWith('"'))) {
+                  endIndex++;
+                } else {
+                  break;
+                }
+              }
+              
+              // Replace the msgstr section
+              lines.splice(i, endIndex - i + 1, ...pluralLines);
+              i += pluralLines.length - 1; // Adjust index
+            } else {
+              // Handle singular form - use the first element if it's an array, or the string directly
+              const translationText = Array.isArray(updatedEntry.msgstr) 
+                ? updatedEntry.msgstr[0] || ''
+                : updatedEntry.msgstr;
+              
+              lines[i] = `msgstr "${this.escapeString(translationText)}"`;
+              
+              // Remove any continuation lines that might exist
+              while (i + 1 < lines.length) {
+                const nextLine = lines[i + 1];
+                if (nextLine && nextLine.startsWith('"')) {
+                  lines.splice(i + 1, 1);
+                } else {
+                  break;
+                }
+              }
+            }
+          }
+          
+          inMsgstr = true;
+          msgstrLineIndex = i;
+        }
+        
+        // Reset context when we hit a new entry
+        if (line.trim() === '' && inMsgstr) {
+          currentMsgid = '';
+          currentMsgctxt = '';
+          inMsgstr = false;
+        }
+      }
+
+      await fs.writeFile(poFile.path, lines.join('\n'), 'utf-8');
     } catch (error) {
       throw new Error(`Failed to save PO file ${filePath}: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+  }
+
+     private extractQuotedString(quotedStr: string): string {
+     // Remove quotes and handle escaped characters
+     const match = quotedStr.match(/^"(.*)"$/);
+     if (match && match[1] !== undefined) {
+       return match[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+     }
+     return quotedStr;
+   }
+
+  private escapeString(str: string): string {
+    // Escape quotes and backslashes for PO format
+    return str.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
   }
 
   public searchTranslations(options: SearchOptions): TranslationSearchResult[] {
