@@ -230,29 +230,47 @@ class TranslatePOMCPServer {
 
           case 'update_translation': {
             const request = args as unknown as UpdateTranslationRequest;
-            const success = await this.translationService.updateTranslation(request);
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: success 
-                    ? `Successfully updated translation for "${request.msgid}" in ${request.filePath}`
-                    : `Failed to update translation for "${request.msgid}" - entry not found`,
-                },
-              ],
-            };
+            try {
+              const success = await this.translationService.updateTranslation(request);
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: success 
+                      ? `Successfully updated translation for "${request.msgid}" in ${request.filePath}`
+                      : `Failed to update translation for "${request.msgid}" - entry not found`,
+                  },
+                ],
+              };
+            } catch (error) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: `Failed to update translation for "${request.msgid}": ${error instanceof Error ? error.message : 'Unknown error'}`,
+                  },
+                ],
+                isError: true,
+              };
+            }
           }
 
           case 'update_multiple_translations': {
             const { translations } = args as { translations: UpdateTranslationRequest[] };
             const result = await this.translationService.updateMultipleTranslations(translations);
+            const totalRequested = translations.length;
+            const statusText = result.failed > 0 
+              ? `Updated ${result.success}/${totalRequested} translations successfully, ${result.failed} failed`
+              : `Successfully updated all ${result.success} translations`;
+            
             return {
               content: [
                 {
                   type: 'text',
-                  text: `Updated ${result.success} translations successfully, ${result.failed} failed`,
+                  text: statusText,
                 },
               ],
+              isError: result.failed > 0,
             };
           }
 

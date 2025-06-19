@@ -100,18 +100,26 @@ export class TranslationService {
 
 
   public async updateTranslation(request: UpdateTranslationRequest): Promise<boolean> {
-    const success = this.poFileService.updateTranslation(request);
-    if (success) {
-      await this.poFileService.savePOFile(request.filePath);
+    try {
+      const success = this.poFileService.updateTranslation(request);
+      if (success) {
+        await this.poFileService.savePOFile(request.filePath);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      // Re-throw the error so the caller knows it failed
+      throw error;
     }
-    return success;
   }
 
   public async updateMultipleTranslations(requests: UpdateTranslationRequest[]): Promise<{ success: number; failed: number }> {
     let success = 0;
     let failed = 0;
     const filesToSave = new Set<string>();
+    const updateErrors: string[] = [];
 
+    // First, try to update all translations in memory
     for (const request of requests) {
       try {
         const result = this.poFileService.updateTranslation(request);
@@ -120,20 +128,48 @@ export class TranslationService {
           filesToSave.add(request.filePath);
         } else {
           failed++;
+          updateErrors.push(`Failed to update "${request.msgid}": entry not found`);
         }
       } catch (error) {
-        console.warn(`Failed to update translation: ${error instanceof Error ? error.message : 'Unknown error'}`);
         failed++;
+        updateErrors.push(`Failed to update "${request.msgid}": ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     }
 
-    // Save all modified files
+    // Then save all modified files, tracking save failures separately
+    const saveErrors: string[] = [];
     for (const filePath of filesToSave) {
       try {
         await this.poFileService.savePOFile(filePath);
       } catch (error) {
-        console.warn(`Failed to save file ${filePath}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        saveErrors.push(`Failed to save file ${filePath}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        // Don't count this as a translation failure, but we should report it
       }
+    }
+
+    // If there were save errors, include them in a combined error message
+    if (saveErrors.length > 0 || updateErrors.length > 0) {
+      const allErrors = [...updateErrors, ...saveErrors];
+      console.warn(`Translation update issues:\n${allErrors.join('\n')}`);
+    }
+
+    // If files failed to save, we should consider those translations as failed
+    if (saveErrors.length > 0) {
+      // Count how many successful updates were in files that failed to save
+      let affectedSuccesses = 0;
+      for (const request of requests) {
+        if (filesToSave.has(request.filePath)) {
+          // This file had updates but failed to save
+          const fileHadSaveError = saveErrors.some(error => error.includes(request.filePath));
+          if (fileHadSaveError) {
+            affectedSuccesses++;
+          }
+        }
+      }
+      
+      // Adjust counts: move affected successes to failed
+      success -= affectedSuccesses;
+      failed += affectedSuccesses;
     }
 
     return { success, failed };
